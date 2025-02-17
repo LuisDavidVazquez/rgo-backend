@@ -1,0 +1,24 @@
+# Base image
+#FROM node:16.13.1-alpine
+FROM node:16-alpine
+
+# Create app directory
+WORKDIR /usr/src/app
+
+# A wildcard is used to ensure both package.json AND package-lock.json are copied
+COPY --chown=node:node package*.json ./
+
+# Install app dependencies
+RUN npm install --force
+
+# Bundle app source
+COPY tsconfig*.json ./
+COPY src ./src
+COPY db ./db
+##COPY .aws ./ 
+
+# Creates a "dist" folder with the production build
+RUN npm run build
+
+# Start the server
+CMD [ "node", "dist/src/main.js" ]

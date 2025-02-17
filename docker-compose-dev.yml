@@ -1,0 +1,21 @@
+version: '3.3'
+services:
+    rastreo-go-api:
+        build:
+            dockerfile: Dockerfile.dev
+            context: .
+        container_name: rastreo-go-api
+        restart: unless-stopped
+        ports:
+            - '5006:5006'
+        volumes:
+            - ./src:/usr/src/app/src
+            - ./db:/usr/src/app/db
+            - ./package.json:/usr/src/app/package.json
+            - /usr/src/app/node_modules
+            - ./.env:/usr/src/app/.env
+        env_file:
+            - .env.dev
+            
+        environment:
+            - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}

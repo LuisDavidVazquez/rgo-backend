@@ -13,14 +13,19 @@ import {
 import { ClientsService } from './clients.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
-import { ApiBearerAuth, ApiBody } from '@nestjs/swagger';
-import { ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags, ApiHeader } from '@nestjs/swagger';
 import { Public } from 'src/auth/decorators/public.decorator';
 import { CreateAddressDto } from 'src/addresses/dto/create-address.dto';
-import { AuthGuard } from 'src/auth/auth.guard';
 import { CreateFiscalDetailDto } from 'src/fiscal_details/dto/create-fiscal_detail.dto';
 
+@ApiTags('Clientes')
 @Controller('clients')
+@ApiHeader({
+  name: 'X-API-Version',
+  description: 'Versión de la API',
+  example: '1.0',
+  required: false
+})
 export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
 
@@ -60,8 +65,7 @@ export class ClientsController {
 
   //@Public()
   @Post('/create-administracion') // Ruta para crear superadministradores
-  @UseGuards(AuthGuard)        // Opción 2
-  @ApiBearerAuth()
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Crear un administrador' })
   @ApiResponse({
     status: 200,
@@ -81,8 +85,7 @@ export class ClientsController {
   }
 
   @Post('/createVentas')
-  @UseGuards(AuthGuard)        // Opción 2
-  @ApiBearerAuth()
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Crear un usuario de ventas' })
   @ApiResponse({
     status: 200,
@@ -95,8 +98,7 @@ export class ClientsController {
   }
 
   @Post('/create-soporte')
-  @UseGuards(AuthGuard)        // Opción 2
-  @ApiBearerAuth()
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Crear un usuario de soporte' })
   @ApiResponse({
     status: 200,
@@ -116,8 +118,7 @@ export class ClientsController {
   ///////////////////////////////////////////////////////////////////////////////////////
   // Nuevas rutas para eliminar datos fiscales y dirección
   @Delete('/remove-datos-fiscales/:clienteId')
-  @UseGuards(AuthGuard)        // Opción 2
-  @ApiBearerAuth()
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Eliminar datos fiscales de un cliente' })
   @ApiResponse({
     status: 200,
@@ -129,8 +130,7 @@ export class ClientsController {
   }
 
   @Delete('/remove-direccion/:clienteId')
-  @UseGuards(AuthGuard)        // Opción 2
-  @ApiBearerAuth()
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Eliminar dirección de un cliente' })
   @ApiResponse({
     status: 200,
@@ -142,8 +142,7 @@ export class ClientsController {
   }
   // Nueva ruta para obtener todas las SIMs de los usuarios relacionados al clienteRastreoGo
   @Get('/sims/:clientId')
-  @UseGuards(AuthGuard)        // Opción 2
-  @ApiBearerAuth()
+  @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'Obtener todas las SIMs de un cliente en rastreo go',
   })
@@ -159,8 +158,7 @@ export class ClientsController {
 
   // Nuevo endpoint para obtener usuarios por distributorId
   @Get('/users/:clientId')
-  @UseGuards(AuthGuard)        // Opción 2
-  @ApiBearerAuth()
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Obtener usuarios por distributorId' })
   @ApiResponse({
     status: 200,
@@ -173,14 +171,23 @@ export class ClientsController {
 
   // Nuevo endpoint para obtener usuarios con estado de SIMs
   @Get('/users-with-sims/:clientId')
-  @UseGuards(AuthGuard)        // Opción 2
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Obtener usuarios con estado de SIMs' })
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Obtener usuarios con estado de SIMs',
+    description: `
+      Lista usuarios con información detallada de sus SIMs.
+      
+      Información incluida:
+      - Datos del usuario
+      - Estado de SIMs
+      - Fechas de activación
+      - Detalles de planes
+    `
+  })
   @ApiResponse({
     status: 200,
-    description:
-      'Lista de usuarios con estado de SIMs encontrada exitosamente.',
-    type: [CreateClientDto],
+    description: 'Lista de usuarios con estado de SIMs encontrada exitosamente',
+    type: [CreateClientDto]
   })
   async getUsersWithSimStatus(@Param('clientId') clientId: string) {
     // console.log('estos son los usuarios con sims');
@@ -188,49 +195,68 @@ export class ClientsController {
   }
 
   @Get()
-  @UseGuards(AuthGuard)        // Opción 2
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Obtener todos los clientes en rastreo go' })
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Obtener todos los clientes',
+    description: `
+      Lista todos los clientes registrados.
+      
+      Filtros disponibles:
+      - Por estado activo
+      - Por nivel de cliente
+      - Por plataforma externa
+    `
+  })
   @ApiResponse({
     status: 200,
-    description: 'Lista de clientes encontrada exitosamente.',
-    type: [CreateClientDto],
-  })
-  @ApiBody({
-    description: 'Lista de clientes a obtener',
-    type: [CreateClientDto],
+    description: 'Lista de clientes encontrada exitosamente',
+    type: [CreateClientDto]
   })
   findAll() {
     return this.clientsService.findAll();
   }
 
   @Get('all-sims')
-  @ApiOperation({ summary: 'Obtener todas las SIMs' })
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Obtener todas las SIMs',
+    description: `
+      Lista todas las SIMs registradas en el sistema.
+      
+      Información incluida:
+      - Estado de activación
+      - Plan asignado
+      - Cliente asociado
+      - Fechas relevantes
+    `
+  })
   @ApiResponse({
     status: 200,
-    description: 'Lista de SIMs encontrada exitosamente.',
-    type: [CreateClientDto],
-  })
-  @ApiBody({
-    description: 'Lista de SIMs a obtener',
-    type: [CreateClientDto],
+    description: 'Lista de SIMs encontrada exitosamente',
+    type: [CreateClientDto]
   })
   async getAllSims() {
     return this.clientsService.getAllSims();
   }
 
   @Get(':id')
-  @UseGuards(AuthGuard)        // Opción 2
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Obtener un cliente por su ID' })
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Obtener cliente por ID',
+    description: `
+      Busca y retorna un cliente específico.
+      
+      Detalles incluidos:
+      - Información básica
+      - Datos fiscales
+      - Direcciones
+      - SIMs asociadas
+    `
+  })
   @ApiResponse({
     status: 200,
-    description: 'Cliente encontrado exitosamente.',
-    type: CreateClientDto,
-  })
-  @ApiBody({
-    description: 'Cliente a obtener',
-    type: CreateClientDto,
+    description: 'Cliente encontrado exitosamente',
+    type: CreateClientDto
   })
   async findOne(@Param('id') id: string) {
     if (id === 'all-sims') {
@@ -240,17 +266,22 @@ export class ClientsController {
   }
 
   @Get('/search')
-  @UseGuards(AuthGuard)        // Opción 2
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Buscar un cliente por nombre' })
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Buscar cliente por nombre',
+    description: `
+      Realiza búsqueda de clientes por nombre.
+      
+      Características:
+      - Búsqueda exacta
+      - Case sensitive
+      - Retorna múltiples coincidencias
+    `
+  })
   @ApiResponse({
     status: 200,
-    description: 'Cliente encontrado exitosamente.',
-    type: CreateClientDto,
-  })
-  @ApiBody({
-    description: 'Cliente a buscar',
-    type: CreateClientDto,
+    description: 'Cliente encontrado exitosamente',
+    type: CreateClientDto
   })
   findByName(@Query('name') name: string) {
     return this.clientsService.findByName(name);
@@ -259,17 +290,28 @@ export class ClientsController {
   }
 
   @Patch(':id')
-  @UseGuards(AuthGuard)        // Opción 2
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Actualizar un cliente por su ID' })
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Actualizar cliente',
+    description: `
+      Actualiza datos de un cliente existente.
+      
+      Campos actualizables:
+      - Información básica
+      - Datos fiscales
+      - Direcciones
+      - Estado activo
+      
+      Restricciones:
+      - No se puede modificar el email
+      - Validaciones de datos fiscales
+      - Registro de cambios
+    `
+  })
   @ApiResponse({
     status: 200,
-    description: 'Cliente actualizado exitosamente.',
-    type: CreateClientDto,
-  })
-  @ApiBody({
-    description: 'Cliente a actualizar',
-    type: CreateClientDto,
+    description: 'Cliente actualizado exitosamente',
+    type: CreateClientDto
   })
   update(
     @Param('id') id: string,
@@ -278,16 +320,23 @@ export class ClientsController {
     return this.clientsService.update(+id, updateClientesRastreoGoDto);
   }
 
-
-
   @Delete(':id')
-  @UseGuards(AuthGuard)        // Opción 2
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Eliminar un cliente por su ID' })
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Eliminar cliente',
+    description: `
+      Elimina un cliente del sistema.
+      
+      Consideraciones:
+      - Verificación de dependencias
+      - Eliminación de relaciones
+      - Registro en bitácora
+      - Notificación por email
+    `
+  })
   @ApiResponse({
     status: 200,
-    description: 'Cliente eliminado exitosamente.',
-    type: CreateClientDto,
+    description: 'Cliente eliminado exitosamente'
   })
   @ApiBody({
     description: 'Cliente a eliminar',
@@ -298,17 +347,23 @@ export class ClientsController {
   }
 
   @Get('with-details/:id')
-  @UseGuards(AuthGuard)        // Opción 2
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Obtener un cliente con detalles por su ID' })
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Obtener cliente con detalles',
+    description: `
+      Retorna información completa del cliente.
+      
+      Detalles incluidos:
+      - Datos fiscales completos
+      - Direcciones registradas
+      - Historial de movimientos
+      - Relaciones con usuarios
+    `
+  })
   @ApiResponse({
     status: 200,
-    description: 'Cliente con detalles encontrado exitosamente.',
-    type: CreateClientDto,
-  })
-  @ApiBody({
-    description: 'Cliente con detalles a obtener',
-    type: CreateClientDto,
+    description: 'Cliente con detalles encontrado exitosamente',
+    type: CreateClientDto
   })
   findOneWithDetails(@Param('id') id: string) {
     return this.clientsService.findOneWithDetails(+id);
@@ -321,19 +376,25 @@ export class ClientsController {
   //   description: 'Lista de SIMs encontrada exitosamente.',
   //   type: [CreateClientDto]
   // })
-  // @ApiBody({
-  //   description: 'Lista de SIMs a obtener',
-  //   type: [CreateClientDto]
-  // })
   //  async getSimsByClientId(@Param('id') id: string) {
   //     // console.log('estos son los sims', id);
   //     return this.clientsService.getSimsByClientId(+id);
   //   }
 
   @Get('database/stats')
-  @UseGuards(AuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Obtener estadísticas de la base de datos' })
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Obtener estadísticas de la base de datos',
+    description: `
+      Retorna estadísticas generales del sistema.
+      
+      Métricas incluidas:
+      - Total de clientes
+      - SIMs activas
+      - Distribución por niveles
+      - Uso de recursos
+    `
+  })
   @ApiResponse({
     status: 200,
     description: 'Estadísticas obtenidas exitosamente'

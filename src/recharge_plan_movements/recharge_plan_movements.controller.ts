@@ -15,7 +15,7 @@ import {
 import { RechargePlanMovementsService } from './recharge_plan_movements.service';
 import { CreateRechargePlanMovementDto } from './dto/create-recharge_plan_movement.dto';
 import { UpdateRechargePlanMovementDto } from './dto/update-recharge_plan_movement.dto';
-import { ApiBody, ApiQuery, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiQuery, ApiResponse, ApiHeader, ApiTags, ApiOperation } from '@nestjs/swagger';
 import { StripeService } from 'src/stripe/stripe.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -25,8 +25,14 @@ import { SearchMovementsDto } from './interfaces/search-movements.dto';
 import { PaginatedResponse } from './interfaces/paginated-response.interface';
 import { GroupedMovement } from './interfaces/grouped-movement.interface';
 
-
+@ApiTags('Movimientos de Planes de Recarga')
 @Controller('recharge-plan-movements')
+@ApiHeader({
+  name: 'X-API-Version',
+  description: 'Versión de la API',
+  example: '1.0',
+  required: false
+})
 export class RechargePlanMovementsController {
   constructor(
     private readonly rechargePlanMovementsService: RechargePlanMovementsService,
@@ -36,15 +42,22 @@ export class RechargePlanMovementsController {
   ) {}
 
   @Get('check-status/:sessionId')
-  @ApiOperation({ summary: 'Revisar el estado de un pago' })
+  @ApiOperation({
+    summary: 'Verificar estado de pago',
+    description: `
+      Verifica el estado actual de un pago por su ID de sesión.
+      
+      Estados posibles:
+      - pending: Pago pendiente
+      - approved: Pago aprobado
+      - rejected: Pago rechazado
+      - cancelled: Pago cancelado
+      - noaprobado: Pago no aprobado
+    `
+  })
   @ApiResponse({
     status: 200,
-    description: 'Estado del pago revisado exitosamente.',
-    type: String,
-  })
-  @ApiBody({
-    description: 'ID de la sesión de pago a revisar',
-    type: String,
+    description: 'Estado del pago verificado exitosamente'
   })
   async checkPaymentStatus(@Param('sessionId') sessionId: string) {
     return this.stripeService.checkPaymentStatus(sessionId);
@@ -81,54 +94,66 @@ export class RechargePlanMovementsController {
   }
   @Public()
   @Post()
-  @ApiOperation({ summary: 'Crear un pago' })
-  @ApiResponse({
-    status: 200,
-    description: 'Pago creado exitosamente.',
-    type: CreateRechargePlanMovementDto,
+  @ApiBearerAuth('access-token')
+  //@Throttle(100, 60)
+  @ApiHeader({ name: 'X-RateLimit-Limit', description: 'Número máximo de solicitudes permitidas', example: '100', required: false })
+  @ApiHeader({ name: 'X-RateLimit-Remaining', description: 'Número de solicitudes restantes', example: '99', required: false })
+  @ApiHeader({ name: 'X-RateLimit-Reset', description: 'Tiempo en segundos para restablecer el límite', example: '60', required: false })
+  @ApiOperation({
+    summary: 'Crear movimiento de recarga',
+    description: `
+      Crea un nuevo movimiento de recarga en el sistema.
+      
+      Reglas de negocio:
+      - Validación de SIM y usuario
+      - Procesamiento de pago según proveedor
+      - Cálculo de comisiones
+      - Actualización de fechas de recarga
+      
+      Comisiones:
+      - 20% por activación
+      - 10% segunda recarga en adelante
+      - 15% al llegar a 1000 recargas/mes
+      - 20% al llegar a 3000 recargas/mes
+      - 25% al llegar a 7500 recargas/mes
+    `
   })
   @ApiBody({
-    description: 'Datos del pago a crear',
     type: CreateRechargePlanMovementDto,
+    description: 'Datos del movimiento de recarga'
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Movimiento creado exitosamente',
+    type: CreateRechargePlanMovementDto
   })
   create(@Body() createRechargePlanMovementDto: CreateRechargePlanMovementDto) {
-    return this.rechargePlanMovementsService.create(
-      createRechargePlanMovementDto,
-    );
+    return this.rechargePlanMovementsService.create(createRechargePlanMovementDto);
   }
 
   @Public()
   @Patch('update-sim')
-  @ApiOperation({ summary: 'Actualizar información de una SIM' })
+  @ApiOperation({
+    summary: 'Actualizar información de SIM',
+    description: `
+      Actualiza la información de una SIM después de una recarga.
+      
+      Actualizaciones:
+      - Fecha de pago
+      - Fecha de vencimiento
+      - Días del plan
+      - Nombre del plan
+      - ID del plan de recarga
+    `
+  })
   @ApiResponse({
     status: 200,
-    description: 'Información de la SIM actualizada exitosamente.',
-    type: CreateRechargePlanMovementDto,
-  })
-  @ApiBody({
-    description: 'Datos para actualizar la información de una SIM',
-    schema: {
-      type: 'object',
-      properties: {
-        simId: {
-          type: 'number',
-          description: 'ID de la SIM a actualizar',
-          example: 123,
-        },
-        rechargePlanId: {
-          type: 'number',
-          description: 'ID del nuevo plan de recarga',
-          example: 456,
-        },
-      },
-      required: ['simId', 'rechargePlanId'],
-    },
+    description: 'Información de SIM actualizada exitosamente'
   })
   async updateSim(@Body() data: { simId: number; rechargePlanId: number }) {
-    // console.log(data, 'esto es updatasim');
     return this.rechargePlanMovementsService.updateSimInformation(
       data.simId,
-      data.rechargePlanId,
+      data.rechargePlanId
     );
   }
 
@@ -594,18 +619,25 @@ export class RechargePlanMovementsController {
 
   @Get('search')
   @ApiOperation({
-    summary: 'Buscar movimientos de recarga con filtros',
-    description:
-      'Obtiene una lista paginada de movimientos de recarga que pueden ser filtrados por fecha, usuario, estado de pago y más.',
+    summary: 'Buscar movimientos',
+    description: `
+      Búsqueda paginada de movimientos con filtros.
+      
+      Filtros disponibles:
+      - Rango de fechas
+      - ID de usuario
+      - Primera recarga
+      - Estado de pago
+      
+      Paginación:
+      - Página actual
+      - Límite por página
+    `
   })
   @ApiResponse({
     status: 200,
-    description: 'Movimientos encontrados exitosamente',
-    type: PaginatedResponse<RechargePlanMovement>,
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Parámetros de búsqueda inválidos',
+    description: 'Búsqueda realizada exitosamente',
+    type: PaginatedResponse
   })
   @ApiQuery({
     name: 'startDate',
@@ -650,15 +682,8 @@ export class RechargePlanMovementsController {
     description: 'Registros por página (máx: 100)',
     default: 10,
   })
-  async searchMovements(
-    @Query() searchDto: SearchMovementsDto,
-    @Req() req
-  ): Promise<PaginatedResponse<RechargePlanMovement>> {
-    // console.log(req, 'estos son los datos del movimiento');
-    return this.rechargePlanMovementsService.searchMovements(
-      searchDto,
-      req,
-    );
+  async searchMovements(@Query() searchDto: SearchMovementsDto, @Req() req) {
+    return this.rechargePlanMovementsService.searchMovements(searchDto, req.user);
   }
 }
 

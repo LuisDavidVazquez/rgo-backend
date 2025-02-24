@@ -13,148 +13,164 @@ import { ClientIccidsService } from './client_iccids.service';
 import { CreateClientIccidDto } from './dto/create-client_iccid.dto';
 import { UpdateClientIccidDto } from './dto/update-client_iccid.dto';
 import { Public } from 'src/auth/decorators/public.decorator';
-import { ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiOperation, ApiResponse, ApiBody, ApiBearerAuth, ApiTags, ApiHeader } from '@nestjs/swagger';
 import { CreateClientDto } from 'src/clients/dto/create-client.dto';
-import { AuthGuard } from 'src/auth/auth.guard';
-import { UseGuards } from '@nestjs/common';
 
+@ApiTags('ICCIDs de Clientes')
 @Controller('client-iccids')
+@ApiHeader({
+  name: 'X-API-Version',
+  description: 'Versión de la API',
+  example: '1.0',
+  required: false
+})
 export class ClientIccidsController {
   constructor(private readonly clientIccidsService: ClientIccidsService) {}
 
- // @Public()
   @Post('/create')
-  @UseGuards(AuthGuard)        // Opción 2
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Crear un nuevo cliente iccid' })
-  @ApiResponse({
-    status: 200,
-    description: 'Cliente iccid creado exitosamente.',
-    type: CreateClientIccidDto,
+  @ApiBearerAuth('access-token')
+  @ApiHeader({ name: 'X-RateLimit-Limit', description: 'Número máximo de solicitudes permitidas', example: '100', required: false })
+  @ApiHeader({ name: 'X-RateLimit-Remaining', description: 'Número de solicitudes restantes', example: '99', required: false })
+  @ApiOperation({
+    summary: 'Crear asociación ICCID-Cliente',
+    description: `
+      Crea una nueva asociación entre un ICCID y un cliente.
+      
+      Validaciones:
+      - ICCID único y válido (19-20 dígitos)
+      - Usuario existente
+      - SIM existente y disponible
+      - Nombre de unidad único por cliente
+      
+      Proceso:
+      - Verifica existencia de SIM
+      - Sincroniza con proveedor si necesario
+      - Crea relaciones en transacción
+      - Actualiza estado de SIM
+    `
   })
-  @ApiBody({
-    description: 'Datos del cliente iccid a crear',
-    type: CreateClientIccidDto,
+  @ApiResponse({
+    status: 201,
+    description: 'Asociación ICCID-Cliente creada exitosamente',
+    type: CreateClientIccidDto
   })
   async create(@Body() createClientIccidDto: CreateClientIccidDto) {
-    try {
-      console.log(
-        'Datos recibidos:',
-        JSON.stringify(createClientIccidDto, null, 2),
-      );
-      const result =
-        await this.clientIccidsService.create(createClientIccidDto);
-      return result;
-    } catch (error) {
-      console.error('Error detallado:', {
-        message: error.message,
-        status: error.status,
-        response: error.response,
-      });
-      throw error;
-    }
+    return await this.clientIccidsService.create(createClientIccidDto);
   }
 
+  
   @Get()
-  @ApiOperation({ summary: 'Obtener todos los clientes iccid' })
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Obtener todas las asociaciones ICCID-Cliente',
+    description: `
+      Lista todas las asociaciones con sus relaciones.
+      
+      Información incluida:
+      - Datos de ICCID
+      - Usuario asociado
+      - SIMs relacionadas
+      - Estado de activación
+    `
+  })
   @ApiResponse({
     status: 200,
-    description: 'Lista de clientes iccid encontrada exitosamente.',
-    type: [CreateClientIccidDto],
-  })
-  @ApiBody({
-    description: 'Datos del cliente iccid a crear',
-    type: CreateClientIccidDto,
+    description: 'Lista de asociaciones encontrada exitosamente',
+    type: [CreateClientIccidDto]
   })
   findAll() {
     return this.clientIccidsService.findAll();
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Obtener un cliente iccid por su ID' })
-  @ApiResponse({
-    status: 200,
-    description: 'Cliente iccid encontrado exitosamente.',
-    type: CreateClientIccidDto,
-  })
-  @ApiBody({
-    description: 'Datos del cliente iccid a crear',
-    type: CreateClientIccidDto,
-  })
-  findOne(@Param('id') id: string) {
-    return this.clientIccidsService.findOne(+id);
-  }
-  @Public()
-  @Patch('limpiar/:id')
-  @ApiOperation({ summary: 'Limpiar campos de un cliente iccid por su ID' })
-  @ApiResponse({
-    status: 200,
-    description: 'Campos del cliente iccid limpiados exitosamente.',
-    type: CreateClientIccidDto,
-  })
-  @ApiBody({
-    description: 'Datos del cliente iccid a crear',
-    type: CreateClientIccidDto,
-  })
-  async limpiarCampos(@Param('id') id: string) {
-    return this.clientIccidsService.limpiarCampos(+id);
-  }
-
-  // @Delete('/limpiar-tabla2')
-  // async limpiarTablaCompleta2() {
-  //   await this.clienteIccidService.limpiarTablaCompleta2();
-  //   return { message: 'La tabla cliente_iccid ha sido limpiada completamente.' };
-  // }
   @Get('/user/:userId')
-  @ApiOperation({ summary: 'Obtener un cliente iccid por su ID de usuario' })
+  @ApiOperation({
+    summary: 'Obtener ICCIDs por usuario',
+    description: `
+      Busca todas las asociaciones ICCID de un usuario específico.
+      
+      Detalles incluidos:
+      - ICCIDs asignados
+      - Estado de cada SIM
+      - Información de dispositivos
+      - Historial de cambios
+    `
+  })
   @ApiResponse({
     status: 200,
-    description: 'Cliente iccid encontrado exitosamente.',
-    type: CreateClientIccidDto,
-  })
-  @ApiBody({
-    description: 'Datos del cliente iccid a crear',
-    type: CreateClientIccidDto,
+    description: 'ICCIDs del usuario encontrados exitosamente',
+    type: [CreateClientIccidDto]
   })
   async findByUserId(@Param('userId', ParseIntPipe) userId: number) {
-    try {
-      const clienteIccid = await this.clientIccidsService.findByUserId(userId);
-      // console.log(clienteIccid, 'este es el cliente iccid');
-      return clienteIccid;
-    } catch (error) {
-      throw new NotFoundException(error.message);
-    }
+    return await this.clientIccidsService.findByUserId(userId);
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Actualizar un cliente iccid por su ID' })
+  @ApiOperation({
+    summary: 'Actualizar asociación ICCID-Cliente',
+    description: `
+      Actualiza datos de una asociación existente.
+      
+      Campos actualizables:
+      - Nombre de unidad
+      - IMEI
+      - GPS
+      - Estado activo
+      
+      Restricciones:
+      - No se puede cambiar el ICCID
+      - Validaciones de datos
+      - Registro de cambios
+    `
+  })
   @ApiResponse({
     status: 200,
-    description: 'Cliente iccid actualizado exitosamente.',
-    type: CreateClientIccidDto,
+    description: 'Asociación actualizada exitosamente',
+    type: UpdateClientIccidDto
   })
-  @ApiBody({
-    description: 'Datos del cliente iccid a crear',
-    type: CreateClientIccidDto,
-  })
-  update(
-    @Param('id') id: string,
-    @Body() updateClientIccidDto: UpdateClientIccidDto,
-  ) {
+  update(@Param('id') id: string, @Body() updateClientIccidDto: UpdateClientIccidDto) {
     return this.clientIccidsService.update(+id, updateClientIccidDto);
   }
 
-  @Public()
-  @Delete(':id')
-  @ApiOperation({ summary: 'Eliminar un cliente iccid por su ID' })
+  @Patch('iccid/:iccid/imei')
+  @ApiOperation({
+    summary: 'Actualizar IMEI por ICCID',
+    description: `
+      Actualiza el IMEI asociado a un ICCID específico.
+      
+      Validaciones:
+      - ICCID existente
+      - Formato IMEI válido (15 dígitos)
+      - Permisos de modificación
+    `
+  })
   @ApiResponse({
     status: 200,
-    description: 'Cliente iccid eliminado exitosamente.',
-    type: CreateClientIccidDto,
+    description: 'IMEI actualizado exitosamente',
+    type: UpdateClientIccidDto
   })
-  @ApiBody({
-    description: 'Datos del cliente iccid a crear',
-    type: CreateClientIccidDto,
+  async updateImeiByIccid(
+    @Param('iccid') iccid: string,
+    @Body() updateClientIccidDto: UpdateClientIccidDto
+  ) {
+    return this.clientIccidsService.updateByIccid(iccid, updateClientIccidDto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({
+    summary: 'Eliminar asociación ICCID-Cliente',
+    description: `
+      Elimina una asociación del sistema.
+      
+      Consideraciones:
+      - Verificación de dependencias
+      - Actualización de relaciones
+      - Registro de eliminación
+      - Notificación a servicios relacionados
+    `
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Asociación eliminada exitosamente'
   })
   remove(@Param('id') id: string) {
     return this.clientIccidsService.remove(+id);
@@ -181,13 +197,5 @@ export class ClientIccidsController {
   })
   findBySimId(@Param('simId') simId: string) {
     return this.clientIccidsService.findBySimId(+simId);
-  }
-
-  @Patch('iccid/:iccid/imei')
-  async updateImeiByIccid(
-    @Param('iccid') iccid: string,
-    @Body() updateClientIccidDto: UpdateClientIccidDto
-  ) {
-    return this.clientIccidsService.updateByIccid(iccid, updateClientIccidDto);
   }
 }

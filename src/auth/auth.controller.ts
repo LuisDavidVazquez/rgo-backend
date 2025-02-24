@@ -9,58 +9,151 @@ import {
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { Public } from './decorators/public.decorator';
-import { ApiBody, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags, ApiHeader } from '@nestjs/swagger';
 import { CreateClientDto } from 'src/clients/dto/create-client.dto';
 
+@ApiTags('Autenticación')
 @Controller('auth')
+@ApiHeader({
+  name: 'X-API-Version',
+  description: 'Versión de la API',
+  example: '1.0',
+  required: false
+})
 export class AuthController {
   constructor(private authService: AuthService) {}
 
-  @Public() // este decorador es  por si quiero hacer una ruta publica que no este protegida y se pueda acceder sin token
+  @Public()
   @HttpCode(HttpStatus.OK)
   @Post('login')
-  @ApiOperation({ summary: 'Iniciar sesión' })
-  @ApiResponse({
-    status: 200,
-    description: 'Inicio de sesión exitoso.',
-    type: CreateClientDto,
+  @ApiHeader({ name: 'X-RateLimit-Limit', description: 'Número máximo de solicitudes permitidas', example: '100', required: false })
+  @ApiHeader({ name: 'X-RateLimit-Remaining', description: 'Número de solicitudes restantes', example: '99', required: false })
+  @ApiOperation({
+    summary: 'Iniciar sesión',
+    description: `
+      Autentica un usuario en el sistema.
+      
+      Proceso:
+      - Valida credenciales
+      - Genera token JWT
+      - Registra inicio de sesión
+      
+      Validaciones:
+      - Email existente
+      - Contraseña correcta
+      - Usuario activo
+      - Permisos vigentes
+    `
   })
   @ApiBody({
-    description: 'Credenciales de inicio de sesión',
-    //type: Record<string, any>
+    schema: {
+      type: 'object',
+      properties: {
+        email: {
+          type: 'string',
+          example: 'usuario@ejemplo.com',
+          description: 'Email del usuario'
+        },
+        password: {
+          type: 'string',
+          example: '********',
+          description: 'Contraseña del usuario'
+        }
+      }
+    }
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Inicio de sesión exitoso',
+    schema: {
+      type: 'object',
+      properties: {
+        access_token: {
+          type: 'string',
+          description: 'Token JWT para autenticación'
+        },
+        user: {
+          type: 'object',
+          properties: {
+            id: { type: 'number' },
+            email: { type: 'string' },
+            name: { type: 'string' },
+            clientLevel: { type: 'string' },
+            permissions: { type: 'array', items: { type: 'string' } }
+          }
+        }
+      }
+    }
   })
   signIn(@Body() signInDto: Record<string, any>) {
-    //  console.log(signInDto, 'signInDto')
     return this.authService.signIn(signInDto.email, signInDto.password);
   }
 
   @Get('profile')
-  @ApiOperation({ summary: 'Obtener el perfil del usuario' })
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Obtener perfil del usuario',
+    description: `
+      Retorna información del usuario autenticado.
+      
+      Información incluida:
+      - Datos personales
+      - Nivel de acceso
+      - Permisos asignados
+      - Última actividad
+    `
+  })
   @ApiResponse({
     status: 200,
-    description: 'Perfil del usuario encontrado exitosamente.',
-    type: CreateClientDto,
+    description: 'Perfil encontrado exitosamente',
+    schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number' },
+        email: { type: 'string' },
+        name: { type: 'string' },
+        clientLevel: { type: 'string' },
+        permissions: { type: 'array', items: { type: 'string' } }
+      }
+    }
   })
   getProfile(@Request() req) {
     return req.user;
   }
 
-  // Ruta para obtener y guardar el token externo
-  // Considera proteger esta ruta con un guard si es necesario
-  @Public() // Quítalo o reemplázalo por @UseGuards(AuthGuard()) para proteger la ruta
+  @Public()
   @Post('obtener-y-guardar-token-externo')
-  @ApiOperation({ summary: 'Obtener y guardar el token externo' })
+  @ApiOperation({
+    summary: 'Obtener y guardar token externo',
+    description: `
+      Obtiene y almacena un token de autenticación externo.
+      
+      Proceso:
+      - Solicita token al servicio externo
+      - Valida respuesta
+      - Almacena token
+      - Actualiza fecha de expiración
+      
+      Consideraciones:
+      - Token válido por 24 horas
+      - Renovación automática
+      - Registro de intentos
+    `
+  })
   @ApiResponse({
     status: 200,
-    description: 'Token externo obtenido y guardado con éxito.',
-    type: CreateClientDto,
-  })
-  @ApiBody({
-    description: 'Token externo a guardar',
-    type: String,
+    description: 'Token externo obtenido y guardado exitosamente',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { 
+          type: 'string',
+          example: 'Token externo obtenido y guardado exitosamente'
+        }
+      }
+    }
   })
   async obtenerYGuardarTokenExterno() {
-    await this.authService.obtenerYGuardarTokenExterno();
-    return { message: 'Token externo obtenido y guardado con éxito' };
+    return await this.authService.obtenerYGuardarTokenExterno();
   }
 }

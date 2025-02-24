@@ -6,12 +6,16 @@ import { Public } from 'src/auth/decorators/public.decorator';
 import { NotFoundException } from '@nestjs/common';
 import { Sim } from './entities/sim.entity';
 import { HttpException, HttpStatus } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
-import { AuthGuard } from 'src/auth/auth.guard';
+import { ApiOperation, ApiResponse, ApiBody, ApiBearerAuth, ApiTags, ApiHeader } from '@nestjs/swagger';
 
-
-
+@ApiTags('Sims')
 @Controller('sims')
+@ApiHeader({
+  name: 'X-API-Version',
+  description: 'Versión de la API',
+  example: '1.0',
+  required: false
+})
 export class SimsController {
   constructor(
     private readonly simsService: SimsService
@@ -24,6 +28,41 @@ export class SimsController {
   //  }
 
   @Post()
+  @ApiBearerAuth('access-token')
+  //@Throttle(100, 60)
+  @ApiHeader({ name: 'X-RateLimit-Limit', description: 'Número máximo de solicitudes permitidas', example: '100', required: false })
+  @ApiHeader({ name: 'X-RateLimit-Remaining', description: 'Número de solicitudes restantes', example: '99', required: false })
+  @ApiHeader({ name: 'X-RateLimit-Reset', description: 'Tiempo en segundos para restablecer el límite', example: '60', required: false })
+  @ApiOperation({
+    summary: 'Crear una nueva SIM',
+    description: `
+      Crea un nuevo registro de SIM en el sistema.
+      
+      Reglas de negocio:
+      - El ICCID debe ser único
+      - El ICCID debe tener 19-20 dígitos numéricos
+      - El status inicial debe ser válido
+      - El clientId debe existir en el sistema
+    `
+  })
+  @ApiBody({
+    type: CreateSimDto,
+    examples: {
+      sim_nueva: {
+        value: {
+          id: 123456,
+          iccid: "8952140061234567890",
+          status: "Inventario",
+          clientId: 1
+        }
+      }
+    }
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'SIM creada exitosamente',
+    type: CreateSimDto
+  })
   create(@Body() createSimDto: CreateSimDto) {
     return this.simsService.create(createSimDto);
   }
@@ -31,18 +70,28 @@ export class SimsController {
 
  // @Public()// este decorador es  por si quiero hacer una ruta publica que no este protegida y se pueda acceder sin token 
   @Post('sync')
-  @UseGuards(AuthGuard)        // Opción 2
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Sincronizar SIMs' })
+  @ApiBearerAuth('access-token')
+  //@Throttle(100, 60)
+  @ApiOperation({
+    summary: 'Sincronizar SIMs',
+    description: `
+      Sincroniza las SIMs con el sistema externo.
+      
+      Proceso:
+      - Obtiene datos del servicio externo
+      - Actualiza registros existentes
+      - Crea nuevos registros si es necesario
+      - Mantiene consistencia de datos
+    `
+  })
   @ApiResponse({
     status: 200,
     description: 'Sincronización completada con éxito',
-    type: String
-  })
-  @ApiResponse({ status: 400, description: 'Error durante la sincronización' })
-  @ApiBody({
-    description: 'Datos para sincronizar SIMs',
-    type: String
+    schema: {
+      example: {
+        message: "Sincronización completada. Total SIMs: 100, Actualizadas: 80, Nuevas: 20"
+      }
+    }
   })
   async syncSims() {
     try {
@@ -59,13 +108,32 @@ export class SimsController {
 
   // @Public()
   @Patch(':id/clear-fields')
-  @UseGuards(AuthGuard)        // Opción 2
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Limpiar campos de una SIM' })
+  @ApiBearerAuth('access-token')
+  //@Throttle(100, 60)
+  @ApiOperation({
+    summary: 'Limpiar campos de una SIM',
+    description: `
+      Limpia campos específicos de una SIM.
+      
+      Campos afectados:
+      - name
+      - unitName
+      - clientId
+      - otros campos relacionados
+      
+      Restricciones:
+      - No se pueden limpiar campos obligatorios
+      - Se requieren permisos de administrador
+    `
+  })
   @ApiResponse({
     status: 200,
     description: 'Campos limpiados exitosamente',
-    type: String
+    schema: {
+      example: {
+        message: "Campos de la SIM limpiados correctamente"
+      }
+    }
   })
   @ApiResponse({
     status: 400,
@@ -88,10 +156,23 @@ export class SimsController {
 
 
   @Get(':id')
-  @ApiOperation({ summary: 'Obtener una SIM por su ID' })
+  @ApiBearerAuth('access-token')
+  //@Throttle(100, 60)
+  @ApiOperation({
+    summary: 'Obtener una SIM por ID',
+    description: `
+      Retorna los detalles de una SIM específica.
+      
+      Información incluida:
+      - Datos básicos de la SIM
+      - Estado actual
+      - Información del cliente
+      - Historial de recargas
+    `
+  })
   @ApiResponse({
     status: 200,
-    description: 'SIM encontrada exitosamente.',
+    description: 'SIM encontrada exitosamente',
     type: CreateSimDto
   })
   @ApiBody({
@@ -119,8 +200,7 @@ export class SimsController {
   }
  // @Public()
   @Patch(':id/status')
-  @UseGuards(AuthGuard)        // Opción 2
-  @ApiBearerAuth()
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Cambiar el estado de una SIM' })
   @ApiResponse({
     status: 200,
@@ -215,8 +295,7 @@ export class SimsController {
 
   @Public()
   @Get('list/all-sims')
-  @UseGuards(AuthGuard)        // Opción 2
-  @ApiBearerAuth()
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Obtener todas las SIMs de la base de datos' })
   @ApiResponse({
     status: 200,

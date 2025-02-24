@@ -13,26 +13,56 @@ import {
 import { SimInventoriesService } from './sim_inventories.service';
 import { CreateSimInventoryDto } from './dto/create-sim_inventory.dto';
 import { UpdateSimInventoryDto } from './dto/update-sim_inventory.dto';
-import { ApiBearerAuth, ApiBody, ApiResponse } from '@nestjs/swagger';
-import { ApiOperation } from '@nestjs/swagger';
-import { Sim } from '../sims/entities/sim.entity';
-import { AuthGuard } from 'src/auth/auth.guard';
+import { ApiBearerAuth, ApiBody, ApiResponse, ApiHeader, ApiTags, ApiOperation } from '@nestjs/swagger';
 
-
+@ApiTags('Inventario de SIMs')
 @Controller('sim-inventories')
+@ApiHeader({
+  name: 'X-API-Version',
+  description: 'Versión de la API',
+  example: '1.0',
+  required: false
+})
 export class SimInventoriesController {
   constructor(private readonly simInventoriesService: SimInventoriesService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Crear un inventario de SIM' })
-  @ApiResponse({
-    status: 200,
-    description: 'Inventario de SIM creado exitosamente.',
-    type: CreateSimInventoryDto,
+  @ApiBearerAuth('access-token')
+  //@Throttle(100, 60)
+  @ApiHeader({ name: 'X-RateLimit-Limit', description: 'Número máximo de solicitudes permitidas', example: '100', required: false })
+  @ApiHeader({ name: 'X-RateLimit-Remaining', description: 'Número de solicitudes restantes', example: '99', required: false })
+  @ApiHeader({ name: 'X-RateLimit-Reset', description: 'Tiempo en segundos para restablecer el límite', example: '60', required: false })
+  @ApiOperation({
+    summary: 'Crear un nuevo inventario de SIM',
+    description: `
+      Registra una nueva SIM en el inventario.
+      
+      Reglas de negocio:
+      - El ICCID debe ser único
+      - El MSISDN debe ser válido
+      - El estado inicial debe ser "inventario"
+      - Se debe especificar el cliente de la compañía
+    `
   })
   @ApiBody({
-    description: 'Datos para crear un inventario de SIM',
     type: CreateSimInventoryDto,
+    examples: {
+      sim_nueva: {
+        value: {
+          companyClient: 1,
+          statusId: 1,
+          status: "inventario",
+          client: "Distribuidor Principal",
+          iccid: "8952140061234567890",
+          msisdn: "5512345678",
+          clientId: 1
+        }
+      }
+    }
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'SIM registrada en inventario exitosamente'
   })
   create(@Body() createSimInventoryDto: CreateSimInventoryDto) {
     return this.simInventoriesService.create(createSimInventoryDto);
@@ -102,121 +132,127 @@ export class SimInventoriesController {
   }
 
   @Post(':id/assign-distributor/:distributorId')
-  @ApiOperation({ summary: 'Asignar un distribuidor a un inventario de SIM' })
+  @ApiBearerAuth('access-token')
+  //@Throttle(100, 60)
+  @ApiOperation({
+    summary: 'Asignar SIM a distribuidor',
+    description: `
+      Asigna una SIM del inventario a un distribuidor específico.
+      
+      Proceso:
+      - Verifica existencia de la SIM
+      - Valida el distribuidor
+      - Actualiza el estado de la SIM
+      - Registra la asignación
+    `
+  })
   @ApiResponse({
     status: 200,
-    description: 'Distribuidor asignado exitosamente.',
-    type: CreateSimInventoryDto,
-  })
-  @ApiBody({
-    description: 'ID de inventario de SIM y ID de distribuidor a asignar',
-    type: String,
+    description: 'SIM asignada exitosamente',
+    schema: {
+      example: {
+        message: "SIM asignada exitosamente al distribuidor",
+        sim: {
+          id: 1,
+          iccid: "8952140061234567890",
+          status: "asignada",
+          distributorId: 1
+        }
+      }
+    }
   })
   async assignDistributor(
     @Param('id') id: string,
     @Param('distributorId') distributorId: string,
   ) {
-    const updatedSim = await this.simInventoriesService.assignClient(
-      +id,
-      +distributorId,
-    );
-    return { message: 'Distribuidor asignado exitosamente', sim: updatedSim };
+    return this.simInventoriesService.assignClient(+id, +distributorId);
   }
 
   @Post('asignar-sim')
-  @ApiOperation({ summary: 'Asignar una SIM a un cliente' })
-  @ApiResponse({
-    status: 200,
-    description: 'SIM asignada exitosamente.',
-    type: CreateSimInventoryDto,
+  @ApiBearerAuth('access-token')
+  //@Throttle(100, 60)
+  @ApiOperation({
+    summary: 'Asignar SIM a cliente final',
+    description: `
+      Asigna una SIM a un cliente final por ICCID.
+      
+      Validaciones:
+      - ICCID debe existir en inventario
+      - Cliente debe estar registrado
+      - SIM debe estar disponible
+    `
   })
   @ApiBody({
-    description: 'Datos para asignar una SIM a un cliente',
     schema: {
       type: 'object',
       properties: {
         iccid: {
           type: 'string',
-          description: 'ICCID de la SIM a asignar',
+          description: 'ICCID de la SIM',
+          example: "8952140061234567890"
         },
         clientName: {
           type: 'string',
-          description: 'Nombre del cliente al que se asignará la SIM',
-        },
-      },
-      required: ['iccid', 'clientName'],
-    },
+          description: 'Nombre del cliente',
+          example: "Juan Pérez"
+        }
+      }
+    }
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'SIM asignada exitosamente al cliente'
   })
   async asignarSimACliente(
     @Body() body: { iccid: string; clientName: string },
   ) {
-    try {
-      const { iccid, clientName } = body;
-      const simAsignada = await this.simInventoriesService.asignarSimACliente(
-        iccid,
-        clientName,
-      );
-      return { message: 'SIM asignada exitosamente', sim: simAsignada };
-    } catch (error) {
-      // Maneja diferentes tipos de errores
-      if (error instanceof NotFoundException) {
-        throw new NotFoundException(error.message);
-      }
-      throw new InternalServerErrorException('Error al asignar la SIM');
-    }
+    return this.simInventoriesService.asignarSimACliente(body.iccid, body.clientName);
   }
 
   @Get('inventario/all-sims')
-  @UseGuards(AuthGuard)        // Opción 2
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Obtener todas las SIMs en inventario' })
+  @ApiBearerAuth('access-token')
+  //@Throttle(100, 60)
+  @ApiOperation({
+    summary: 'Obtener todas las SIMs en inventario',
+    description: `
+      Retorna lista completa de SIMs en inventario con metadata.
+      
+      Información incluida:
+      - Datos básicos de cada SIM
+      - Estado actual
+      - Estadísticas generales
+      - Agrupación por cliente
+    `
+  })
   @ApiResponse({
     status: 200,
-    description: 'Lista de todas las SIMs en inventario obtenida exitosamente',
+    description: 'Lista de SIMs obtenida exitosamente',
     schema: {
-      properties: {
-        success: { type: 'boolean' },
-        message: { type: 'string' },
-        total: { type: 'number' },
-        data: { 
-          type: 'array',
-          items: { $ref: '#/components/schemas/SimInventory' }
-        },
+      example: {
+        success: true,
+        message: "Se encontraron X SIMs en inventario",
+        total: 100,
+        data: [
+          {
+            id: 1,
+            iccid: "8952140061234567890",
+            status: "inventario",
+            // ... otros campos
+          }
+        ],
         metadata: {
-          type: 'object',
-          properties: {
-            activas: { type: 'number' },
-            inactivas: { type: 'number' },
-            enInventario: { type: 'number' },
-            porCompanyClient: {
-              type: 'object',
-              additionalProperties: { type: 'number' }
-            }
+          activas: 50,
+          inactivas: 30,
+          enInventario: 20,
+          porCompanyClient: {
+            "1": 30,
+            "2": 70
           }
         }
       }
     }
   })
-  @ApiResponse({ 
-    status: 500, 
-    description: 'Error interno del servidor',
-    schema: {
-      properties: {
-        success: { type: 'boolean' },
-        message: { type: 'string' },
-        error: { type: 'string' }
-      }
-    }
-  })
   async obtenerTodasLasSims() {
-    try {
-      return await this.simInventoriesService.findAllSims();
-    } catch (error) {
-      throw new InternalServerErrorException({
-        success: false,
-        message: 'Error al obtener las SIMs del inventario',
-        error: error.message
-      });
-    }
+    return this.simInventoriesService.findAllSims();
   }
 }

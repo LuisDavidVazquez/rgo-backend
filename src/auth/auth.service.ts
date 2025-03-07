@@ -11,6 +11,7 @@ import { ClientsService } from 'src/clients/clients.service';
 import { TokensService } from 'src/tokens/tokens.service';
 import { Console } from 'console';
 import { User } from 'src/users/entities/user.entity';
+import { MailService } from 'src/Mail.service';
 
 @Injectable()
 export class AuthService {
@@ -21,6 +22,7 @@ export class AuthService {
     private jwtService: JwtService,
     private httpService: HttpService, // Añade HttpService para hacer solicitudes HTTP
     private tokenService: TokensService, // Asume un servicio para manejar tokens en tu DB
+    private mailService: MailService,
   ) { }
 
 
@@ -245,7 +247,151 @@ export class AuthService {
     // Asegúrate de actualizar la fecha de última actualización en tu TokenService
   }
 
+  async requestPasswordReset(email: string) {
+    try {
+        // Primero intentamos buscar en clientes
+        const client = await this.clientService.findOneByEmail(email);
+        if (client) {
+            // Si encontramos un cliente, generamos su token
+            const payload = { 
+                email: client.email, 
+                id: client.id, 
+                type: 'client' 
+            };
+            
+            const token = this.jwtService.sign(payload, { expiresIn: '1h' });
+            
+            // Enviar el correo al cliente
+            await this.mailService.sendPasswordResetEmail(email, token);
+            return { 
+                message: 'Correo de restauración enviado exitosamente',
+                userType: 'client'
+            };
+        }
 
+        // Si no es un cliente, buscamos en usuarios
+        const user = await this.usersService.findByEmailHash(email);
+        if (user) {
+            // Si encontramos un usuario, generamos su token
+            const payload = { 
+                email: user.email, 
+                id: user.id, 
+                type: 'user' 
+            };
+            
+            const token = this.jwtService.sign(payload, { expiresIn: '1h' });
+            
+            // Enviar el correo al usuario
+            await this.mailService.sendPasswordResetEmail(email, token);
+            return { 
+                message: 'Correo de restauración enviado exitosamente',
+                userType: 'user'
+            };
+        }
+        // Si no se encuentra en ninguna tabla
+        return { 
+            message: 'Si el correo existe, recibirás instrucciones para restaurar tu contraseña',
+            userType: null
+        };
+    } catch (error) {
+        console.error('Error en requestPasswordReset:', error);
+        throw new Error('Error al procesar la solicitud de restauración de contraseña');
+    }
+  }
+
+  async resetPassword(token: string, newPassword: string, confirmPassword: string) {
+    // Validación inicial de contraseñas
+    if (newPassword !== confirmPassword) {
+        throw new Error('Las contraseñas no coinciden');
+    }
+    
+    try {
+        // Verificar y decodificar el token
+        const decoded = this.jwtService.verify(token)
+
+        console.log(decoded);
+
+        // Hash de la nueva contraseña
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        
+        // Caso: Cliente
+        if (decoded.type === 'client') {
+            const client = await this.clientService.findOneByEmail(decoded.email);
+            
+            if (!client) {
+                throw new Error('Cliente no encontrado');
+            }
+
+
+            // Actualizar la contraseña del cliente
+            await this.clientService.updatePassword(client.id, { password: hashedPassword });
+            
+            return {
+                message: 'Contraseña actualizada exitosamente',
+                userType: 'client'
+            };
+        }
+
+        // Caso: Usuario
+        if (decoded.type === 'user') {
+            const user = await this.usersService.findByEmailHash(decoded.email);
+            
+            if (!user) {
+                throw new Error('Usuario no encontrado');
+            }
+
+            // Actualizar la contraseña del usuario
+            await this.usersService.updatePassword(user.id, { password: hashedPassword });
+            
+            return {
+                message: 'Contraseña actualizada exitosamente',
+                userType: 'user'
+            };
+        }
+
+        throw new Error('Tipo de usuario no válido en el token');
+
+    } catch (error) {
+        if (error.name === 'JsonWebTokenError') {
+            throw new Error('Token inválido o expirado');
+        }
+        if (error.name === 'TokenExpiredError') {
+            throw new Error('El token ha expirado');
+        }
+        throw new Error(`Error al restaurar la contraseña: ${error.message}`);
+    }
+  }
+
+  async verifyResetToken(token: string): Promise<{ 
+    valid: boolean; 
+    message: string;
+    userType?: 'client' | 'user';
+  }> {
+    try {
+      const decoded = this.jwtService.verify(token) as {
+        email: string;
+        id: number;
+        type: 'client' | 'user';
+      };
+
+      return { 
+        valid: true, 
+        message: 'Token válido',
+        userType: decoded.type
+      };
+    } catch (error) {
+      if (error.name === 'TokenExpiredError') {
+        return { 
+          valid: false, 
+          message: 'El enlace de restauración ha expirado' 
+        };
+      }
+      return { 
+        valid: false, 
+        message: 'Token inválido o malformado' 
+      };
+    }
+  }
 
   // async signIn(username: string, pass: string) {
   //   const user = await this.usuariosRastreoGoservice.findOne(username);

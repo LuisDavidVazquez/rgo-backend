@@ -11,6 +11,7 @@ import { AuthService } from './auth.service';
 import { Public } from './decorators/public.decorator';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags, ApiHeader } from '@nestjs/swagger';
 import { CreateClientDto } from 'src/clients/dto/create-client.dto';
+import { JwtService } from '@nestjs/jwt';
 
 @ApiTags('Autenticación')
 @Controller('auth')
@@ -21,7 +22,10 @@ import { CreateClientDto } from 'src/clients/dto/create-client.dto';
   required: false
 })
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   @Public()
   @HttpCode(HttpStatus.OK)
@@ -155,5 +159,135 @@ export class AuthController {
   })
   async obtenerYGuardarTokenExterno() {
     return await this.authService.obtenerYGuardarTokenExterno();
+  }
+
+  @Post('request-reset-password')
+  @Public()
+  @ApiOperation({
+    summary: 'Solicitar restauración de contraseña',
+    description: `
+      Envía un correo electrónico con un enlace para restaurar la contraseña.
+      
+      Proceso:
+      - Valida el email proporcionado
+      - Genera un token temporal
+      - Envía email con instrucciones
+      - El token expira en 1 hora
+    `
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['email'],
+      properties: {
+        email: {
+          type: 'string',
+          format: 'email',
+          description: 'Correo electrónico registrado del usuario',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Correo de restauración enviado exitosamente',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Email no encontrado en el sistema',
+  })
+  async requestPasswordReset(@Body('email') email: string) {
+    return this.authService.requestPasswordReset(email);
+  }
+
+  @Post('reset-password')
+  @Public()
+  @ApiOperation({
+    summary: 'Restaurar contraseña',
+    description: `
+      Actualiza la contraseña del usuario usando el token de restauración.
+      
+      Validaciones:
+      - Token válido y no expirado
+      - Nueva contraseña cumple requisitos de seguridad
+      - Confirmación de contraseña coincide
+      - Token de uso único
+    `
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['token', 'newPassword', 'confirmPassword'],
+      properties: {
+        token: {
+          type: 'string',
+          description: 'Token de restauración recibido por email',
+        },
+        newPassword: {
+          type: 'string',
+          description: 'Nueva contraseña',
+          minLength: 8,
+        },
+        confirmPassword: {
+          type: 'string',
+          description: 'Confirmación de la nueva contraseña',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Contraseña actualizada exitosamente',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Token inválido o contraseñas no coinciden',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Token expirado',
+  })
+  async resetPassword(
+    @Body('token') token: string,
+    @Body('newPassword') newPassword: string,
+    @Body('confirmPassword') confirmPassword: string,
+  ) {
+    return this.authService.resetPassword(token, newPassword, confirmPassword);
+  }
+
+  @Post('verify-reset-token')
+  @Public()
+  @ApiOperation({
+    summary: 'Verificar token de restauración',
+    description: `
+      Verifica si el token de restauración es válido y no ha expirado.
+      
+      Validaciones:
+      - Token debe existir
+      - No debe haber expirado
+    `
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['token'],
+      properties: {
+        token: {
+          type: 'string',
+          description: 'Token de restauración recibido por email',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Token válido',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Token inválido',
+  })
+  async verifyResetToken(@Body('token') token: string) {
+    return this.authService.verifyResetToken(token);
   }
 }

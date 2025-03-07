@@ -25,7 +25,7 @@ export class Client {
     @Column({ type: 'varchar', length: 255 })
     email: string;
 
-    @Column({ type: 'varchar', length: 255, nullable: true })
+    @Column({ type: 'varchar', length: 1024, nullable: true })
     password?: string;
 
     @Column({ type: 'varchar', length: 255, nullable: true })

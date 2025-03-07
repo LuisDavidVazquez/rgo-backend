@@ -16,6 +16,7 @@ import { FiscalDetailsModule } from 'src/fiscal_details/fiscal_details.module';
 import { MailService } from 'src/Mail.service';
 import { MailModule } from 'src/Mail.module';
 import { AuthModule } from 'src/auth/auth.module';
+import { JwtModule } from '@nestjs/jwt';
 @Module({
   imports: [TypeOrmModule.forFeature([Client, FiscalDetail, Address]),
     forwardRef(() => UsersModule),// Usa forwardRef para evitar dependencias circulares
@@ -26,6 +27,10 @@ import { AuthModule } from 'src/auth/auth.module';
     FiscalDetailsModule,
     MailModule,
     forwardRef(() => AuthModule),
+    JwtModule.register({
+      secret: process.env.JWT_SECRET || 'tu_secret_key',
+      signOptions: { expiresIn: '1h' },
+    }),
   ],
   controllers: [ClientsController],
   providers: [ClientsService,MailService],

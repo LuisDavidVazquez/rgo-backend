@@ -19,9 +19,7 @@ import { In } from 'typeorm';
 import { ClientIccidsService } from 'src/client_iccids/client_iccids.service';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { User } from 'src/users/entities/user.entity';
-
-
-
+import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 export class ClientsService {
@@ -45,6 +43,7 @@ export class ClientsService {
     private clientIccidRepository: Repository<ClientIccid>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    private readonly jwtService: JwtService,
   ) { }
   // const winnCreateUrl = 'https://plataformasconnectivity.qasar.app/account/winn-create'; // Ajusta esta URL según sea necesario
 
@@ -614,7 +613,11 @@ export class ClientsService {
   // }
 
   update(id: number, updateClientDto: UpdateClientDto) {
-    return `This action updates a #${id} clientesRastreoGo`;
+    return this.repo.update(id, updateClientDto);
+  }
+
+  updatePassword(id: number, updateClientDto: UpdateClientDto) {
+    return this.repo.update(id, updateClientDto);
   }
 
   async remove(id: number): Promise<{ message: string }> {
@@ -844,6 +847,100 @@ async createSoporte(createDto: CreateClientDto): Promise<Client & { message: str
       };
     } catch (error) {
       throw new InternalServerErrorException('Error al obtener estadísticas y datos');
+    }
+  }
+
+  async requestPasswordReset(email: string) {
+    // Buscar el cliente por email
+    const client = await this.repo.findOne({ where: { email } });
+    if (!client) {
+      // Por seguridad, no revelamos si el email existe o no
+      return { message: 'Si el correo existe, recibirás instrucciones para restaurar tu contraseña' };
+    }
+
+    // Generar token JWT con expiración de 1 hora
+    const token = this.jwtService.sign(
+      { email: client.email, id: client.id },
+      { expiresIn: '1h' }
+    );
+
+    try {
+      // Enviar correo con el token
+      await this.mailService.sendPasswordResetEmail(email, token);
+      return { message: 'Correo de restauración enviado exitosamente' };
+    } catch (error) {
+      throw new Error('Error al enviar el correo de restauración');
+    }
+  }
+
+  async resetPassword(token: string, newPassword: string, confirmPassword: string) {
+    // Validar que las contraseñas coincidan
+    if (newPassword !== confirmPassword) {
+      throw new Error('Las contraseñas no coinciden');
+    }
+
+    try {
+      // Verificar y decodificar el token
+      const decoded = this.jwtService.verify(token);
+      
+      // Buscar el cliente
+      const client = await this.repo.findOne({ where: { email: decoded.email } });
+      if (!client) {
+        throw new Error('Cliente no encontrado');
+      }
+
+      // Hashear la nueva contraseña
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      
+      // Actualizar la contraseña
+      client.password = hashedPassword;
+      await this.repo.save(client);
+
+      // Registrar la acción
+      await this.actionLogService.logAction(
+        'RESET_PASSWORD',
+        client.id,
+        `Contraseña restaurada para: ${client.email}`
+      );
+
+      return { message: 'Contraseña actualizada exitosamente' };
+    } catch (error) {
+      if (error.name === 'TokenExpiredError') {
+        throw new Error('El enlace de restauración ha expirado');
+      }
+      throw new Error('Error al restaurar la contraseña');
+    }
+  }
+
+  async verifyResetToken(token: string): Promise<{ valid: boolean; message: string }> {
+    try {
+      // Verificar el token sin necesidad de un secret adicional
+      const decoded = this.jwtService.verify(token);
+      
+      // Si llegamos aquí, el token es válido
+      return { 
+        valid: true, 
+        message: 'Token válido' 
+      };
+    } catch (error) {
+      // Manejo específico de errores
+      if (error.name === 'TokenExpiredError') {
+        return { 
+          valid: false, 
+          message: 'El enlace de restauración ha expirado' 
+        };
+      } else if (error.name === 'JsonWebTokenError') {
+        return { 
+          valid: false, 
+          message: 'Token inválido o malformado' 
+        };
+      }
+      
+      // Otros errores
+      return { 
+        valid: false, 
+        message: 'Error al verificar el token' 
+      };
     }
   }
 }

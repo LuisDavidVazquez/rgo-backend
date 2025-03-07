@@ -99,9 +99,7 @@ export class UsersService {
       }
 
       // Verificar email en users
-      const existingUser = await this.userRepository.findOne({
-        where: { email: createUserDto.email },
-      });
+      const existingUser = await this.findByEmailHash(createUserDto.email);
 
       if (existingUser) {
         throw new HttpException(
@@ -270,6 +268,10 @@ export class UsersService {
   // findOne(id: number) {
   //   return `This action returns a #${id} user`;
   // }
+
+  updatePassword(id: number, updateClientDto: UpdateUserDto) {
+    return this.userRepository.update(id, updateClientDto);
+  }
 
   async update(id: number, updateUserDto: UpdateUserDto): Promise<User> {
     const user = await this.userRepository.findOneBy({ id });

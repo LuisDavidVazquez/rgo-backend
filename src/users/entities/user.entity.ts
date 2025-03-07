@@ -50,7 +50,7 @@ export class User {
     @Column({ type: 'varchar', length: 255, nullable: true })
     clientLevel?: string;
 
-    @Column({ type: 'varchar', length: 255, nullable: true })
+    @Column({ type: 'varchar', length: 1024, nullable: true })
     @Exclude()
     password: string;
 

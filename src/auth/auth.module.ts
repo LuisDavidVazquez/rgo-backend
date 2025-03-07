@@ -10,6 +10,7 @@ import { HttpModule } from '@nestjs/axios';
 import { ClientsModule } from 'src/clients/clients.module';
 import { TokensModule } from 'src/tokens/tokens.module';
 import { ConfigModule } from '@nestjs/config';
+import { MailModule } from 'src/Mail.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { ConfigModule } from '@nestjs/config';
     }),
     HttpModule, // Asegúrate de agregar esto si estás utilizando HttpService en AuthService
     forwardRef(() => TokensModule), // Modifica esta línea
+    MailModule,
   ],
   providers: [
     AuthService, 
